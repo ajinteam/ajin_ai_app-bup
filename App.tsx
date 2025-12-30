@@ -3,7 +3,7 @@ import React, { useState, useMemo, useEffect, useRef } from 'react';
 import type { Item, Transaction } from './types';
 import AddItemModal from './components/AddItemModal';
 import ItemDetailModal from './components/ItemDetailModal';
-import { PlusIcon, BoxIcon, SearchIcon, TrashIcon, DownloadIcon, CloudIcon, SyncIcon, ServerIcon } from './components/icons';
+import { PlusIcon, BoxIcon, SearchIcon, TrashIcon, DownloadIcon, CloudIcon, ServerIcon } from './components/icons';
 
 const STORAGE_KEY = 'inventory_system_data_v2';
 const ADMIN_PASSWORD = '0000';
@@ -32,11 +32,9 @@ const App: React.FC = () => {
   const [syncStatus, setSyncStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle');
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // --- 서버 동기화 로직 (Vercel KV / Postgres 연동용) ---
   const fetchFromServer = async () => {
     setSyncStatus('loading');
     try {
-      // 실제 구현 시 /api/inventory 엔드포인트를 호출합니다.
       const response = await fetch('/api/inventory');
       if (response.ok) {
         const data = await response.json();
@@ -58,7 +56,6 @@ const App: React.FC = () => {
   const saveToServer = async (data: Item[]) => {
     setSyncStatus('loading');
     try {
-      // 실제 구현 시 /api/inventory 엔드포인트에 POST/PUT 요청을 보냅니다.
       const response = await fetch('/api/inventory', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -76,7 +73,6 @@ const App: React.FC = () => {
     fetchFromServer();
   }, []);
 
-  // 데이터 변경 시 로컬 스토리지 저장 및 서버 동기화 (디바운스 권장)
   useEffect(() => {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(items));
     if (items.length > 0) {
@@ -102,12 +98,10 @@ const App: React.FC = () => {
     return Array.from(new Set(serials));
   }, [items]);
 
-  // --- 로컬 파일 백업 (저장 위치 지정 지원) ---
   const handleLocalExport = async () => {
     const dataObj = { items, version: '2.0', exportDate: new Date().toISOString() };
     const jsonStr = JSON.stringify(dataObj, null, 2);
 
-    // 최신 브라우저의 File System Access API 시도
     if ('showSaveFilePicker' in window) {
       try {
         const handle = await (window as any).showSaveFilePicker({
@@ -128,7 +122,6 @@ const App: React.FC = () => {
       }
     }
 
-    // 폴백: 일반 다운로드 방식
     const blob = new Blob([jsonStr], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
@@ -267,18 +260,18 @@ const App: React.FC = () => {
         <div className="bg-white rounded-3xl shadow-2xl w-full max-w-md p-10 animate-fade-in-up border border-slate-100">
           <div className="flex flex-col items-center mb-10">
             <div className="bg-indigo-600 p-4 rounded-2xl shadow-lg mb-6">
-              <BoxIcon className="w-10 h-10 text-white" />
+              <BoxIcon className="w-12 h-12 text-white" />
             </div>
-            <h1 className="text-2xl font-black text-slate-800 tracking-tight uppercase">재고 관리 시스템</h1>
+            <h1 className="text-3xl font-black text-slate-800 tracking-tight uppercase">재고 관리 시스템</h1>
           </div>
           <form onSubmit={handleLogin} className="space-y-6">
             <input 
               type="password" autoFocus value={loginPassword}
               onChange={(e) => setLoginPassword(e.target.value)}
               placeholder="PASSWORD"
-              className="w-full px-6 py-4 bg-slate-50 border-2 border-slate-100 rounded-2xl focus:border-indigo-600 outline-none text-center text-3xl font-black tracking-[0.5em] transition-all"
+              className="w-full px-6 py-5 bg-slate-50 border-2 border-slate-100 rounded-2xl focus:border-indigo-600 outline-none text-center text-4xl font-black tracking-[0.5em] transition-all"
             />
-            <button type="submit" className="w-full py-4 bg-indigo-600 text-white font-black rounded-xl shadow-xl hover:bg-indigo-700 transition-all">로그인</button>
+            <button type="submit" className="w-full py-5 bg-indigo-600 text-white font-black rounded-xl shadow-xl hover:bg-indigo-700 transition-all text-xl">로그인</button>
           </form>
         </div>
       </div>
@@ -287,99 +280,104 @@ const App: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-slate-50 text-slate-800 font-sans">
-      <header className="bg-white border-b border-slate-200 sticky top-0 z-10 shadow-sm">
+      <header className="bg-white border-b border-slate-200 sticky top-0 z-20 shadow-sm">
         <div className="container mx-auto px-4 sm:px-6">
-            <div className="flex justify-between items-center py-4">
-                <div className="flex items-center space-x-3">
-                    <BoxIcon className="h-7 w-7 text-indigo-600" />
-                    <h1 className="text-xl font-bold text-slate-900 tracking-tight uppercase">재고 관리 시스템</h1>
-                </div>
+            <div className="flex justify-between items-center py-5">
                 <div className="flex items-center space-x-4">
-                  <div className="flex items-center space-x-2 px-3 py-1 bg-slate-50 rounded-full border border-slate-100">
-                    <div className={`w-2 h-2 rounded-full ${syncStatus === 'success' ? 'bg-emerald-500' : syncStatus === 'loading' ? 'bg-amber-500 animate-pulse' : 'bg-rose-500'}`}></div>
+                    <BoxIcon className="h-9 w-9 text-indigo-600" />
+                    <h1 className="text-2xl font-bold text-slate-900 tracking-tight uppercase">재고 관리 시스템</h1>
+                </div>
+                <div className="flex items-center space-x-3">
+                  <div className="flex items-center space-x-2 px-3 py-1.5 bg-slate-50 rounded-full border border-slate-100 mr-2">
+                    <div className={`w-2.5 h-2.5 rounded-full ${syncStatus === 'success' ? 'bg-emerald-500' : syncStatus === 'loading' ? 'bg-amber-500 animate-pulse' : 'bg-rose-500'}`}></div>
                     <span className="text-[10px] font-black uppercase text-slate-400 tracking-widest">
-                        {syncStatus === 'success' ? 'Cloud Synced' : syncStatus === 'loading' ? 'Syncing...' : 'Sync Error'}
+                        {syncStatus === 'success' ? 'Synced' : syncStatus === 'loading' ? 'Syncing' : 'Error'}
                     </span>
                   </div>
-                  <button onClick={handleLogout} className="px-3 py-1 bg-slate-100 text-slate-500 rounded-md hover:bg-slate-200 transition-colors font-bold text-xs uppercase">Logout</button>
+                  
+                  {/* 데이터 관리 버튼들 (헤더로 이동 및 소형화) */}
+                  <button onClick={handleLocalExport} className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-800 text-white font-black rounded-lg hover:bg-slate-900 transition-all text-[10px] uppercase tracking-wider">
+                      <DownloadIcon className="w-3.5 h-3.5" />
+                      <span>내보내기</span>
+                  </button>
+                  <label className="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-slate-200 text-slate-600 font-black rounded-lg hover:bg-slate-50 transition-all text-[10px] cursor-pointer uppercase tracking-wider">
+                      <CloudIcon className="w-3.5 h-3.5" />
+                      <span>가져오기</span>
+                      <input type="file" ref={fileInputRef} className="hidden" accept=".json" onChange={handleLocalImport} />
+                  </label>
+                  
+                  <div className="w-px h-4 bg-slate-200 mx-1"></div>
+                  
+                  <button onClick={handleLogout} className="px-4 py-1.5 bg-slate-100 text-slate-500 rounded-lg hover:bg-slate-200 transition-colors font-black text-[10px] uppercase">Logout</button>
                 </div>
             </div>
-            <div className="flex space-x-8 -mb-px">
+            <div className="flex space-x-12 -mb-px">
                 {authRole === 'admin' && (
-                  <button onClick={() => setActiveTab('part')} className={`pb-3 px-1 text-sm font-black uppercase tracking-widest transition-all border-b-2 ${activeTab === 'part' ? 'border-indigo-600 text-indigo-600' : 'border-transparent text-slate-400 hover:text-slate-600'}`}>
+                  <button onClick={() => setActiveTab('part')} className={`pb-4 px-2 text-lg font-black uppercase tracking-widest transition-all border-b-4 ${activeTab === 'part' ? 'border-indigo-600 text-indigo-600' : 'border-transparent text-slate-400 hover:text-slate-600'}`}>
                     부품 재고관리 ({stats.partCount})
                   </button>
                 )}
-                <button onClick={() => setActiveTab('product')} className={`pb-3 px-1 text-sm font-black uppercase tracking-widest transition-all border-b-2 ${activeTab === 'product' ? 'border-indigo-600 text-indigo-600' : 'border-transparent text-slate-400 hover:text-slate-600'}`}>
+                <button onClick={() => setActiveTab('product')} className={`pb-4 px-2 text-lg font-black uppercase tracking-widest transition-all border-b-4 ${activeTab === 'product' ? 'border-indigo-600 text-indigo-600' : 'border-transparent text-slate-400 hover:text-slate-600'}`}>
                   제품 재고관리 ({stats.productCount})
                 </button>
             </div>
         </div>
       </header>
 
-      <main className="container mx-auto p-4 sm:p-6">
-        <div className="flex flex-col xl:flex-row xl:justify-between xl:items-center gap-4 mb-8">
-          <div className="relative flex-grow max-w-xl">
-              <span className="absolute inset-y-0 left-0 flex items-center pl-4"><SearchIcon className="text-slate-400 w-5 h-5" /></span>
+      <main className="container mx-auto p-4 sm:p-8">
+        <div className="flex flex-col xl:flex-row xl:justify-between xl:items-center gap-6 mb-10">
+          <div className="relative flex-grow max-w-3xl">
+              <span className="absolute inset-y-0 left-0 flex items-center pl-5"><SearchIcon className="text-slate-400 w-6 h-6" /></span>
               <input
                   type="text" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value.toUpperCase())}
                   placeholder="품명, 코드, 일련번호 검색..."
-                  className="w-full pl-11 pr-4 py-3 border-2 border-slate-100 rounded-2xl focus:outline-none focus:border-indigo-400 bg-white shadow-sm font-medium transition-all"
+                  className="w-full pl-14 pr-6 py-4 border-2 border-slate-100 rounded-2xl focus:outline-none focus:border-indigo-400 bg-white shadow-sm font-bold text-lg transition-all"
               />
           </div>
-          <div className="flex flex-wrap gap-2">
-            <button onClick={handleLocalExport} className="flex items-center gap-2 px-4 py-3 bg-slate-800 text-white font-black rounded-xl shadow-lg hover:bg-slate-900 transition-all text-xs uppercase tracking-widest">
-                <DownloadIcon className="w-4 h-4" />
-                <span>데이터 내보내기</span>
-            </button>
-            <label className="flex items-center gap-2 px-4 py-3 bg-white border-2 border-slate-200 text-slate-600 font-black rounded-xl shadow-sm hover:bg-slate-50 transition-all text-xs cursor-pointer uppercase tracking-widest">
-                <CloudIcon className="w-4 h-4" />
-                <span>데이터 가져오기</span>
-                <input type="file" ref={fileInputRef} className="hidden" accept=".json" onChange={handleLocalImport} />
-            </label>
-            <button onClick={exportToExcel} className="flex items-center gap-2 px-4 py-3 bg-emerald-600 text-white font-black rounded-xl shadow-lg hover:bg-emerald-700 transition-all text-xs uppercase tracking-widest">
-                <ServerIcon className="w-4 h-4" />
+          <div className="flex flex-wrap gap-3">
+            <button onClick={exportToExcel} className="flex items-center gap-2 px-8 py-4 bg-emerald-600 text-white font-black rounded-xl shadow-lg hover:bg-emerald-700 transition-all text-base uppercase tracking-widest">
+                <ServerIcon className="w-5 h-5" />
                 <span>엑셀 파일 저장</span>
             </button>
-            <button onClick={() => setShowAddItemModal(true)} className="flex items-center gap-2 px-5 py-3 bg-indigo-600 text-white font-black rounded-xl shadow-lg shadow-indigo-100 hover:bg-indigo-700 transition-all text-xs uppercase tracking-widest">
-                <PlusIcon className="w-5 h-5" />
+            <button onClick={() => setShowAddItemModal(true)} className="flex items-center gap-2 px-10 py-4 bg-indigo-600 text-white font-black rounded-xl shadow-xl shadow-indigo-100 hover:bg-indigo-700 transition-all text-base uppercase tracking-widest">
+                <PlusIcon className="w-6 h-6" />
                 <span>신규 등록</span>
             </button>
           </div>
         </div>
 
-        <div className="bg-white shadow-xl border border-slate-100 rounded-3xl overflow-hidden">
+        <div className="bg-white shadow-2xl border border-slate-100 rounded-[2.5rem] overflow-hidden">
           <div className="overflow-x-auto">
-            <table className="w-full text-sm text-left">
-              <thead className="text-[10px] text-slate-400 uppercase bg-slate-50/50 border-b border-slate-100 font-black tracking-[0.15em]">
+            <table className="w-full text-left">
+              <thead className="text-sm text-slate-400 uppercase bg-slate-50/50 border-b border-slate-100 font-black tracking-[0.2em]">
                 <tr>
-                  <th className="px-8 py-5">품목 코드</th>
-                  <th className="px-8 py-5">품명 / 제품명</th>
-                  {activeTab === 'part' && <th className="px-8 py-5">도번</th>}
-                  <th className="px-8 py-5 text-right">현재 재고수량</th>
-                  <th className="px-8 py-5 text-center">관리</th>
+                  <th className="px-10 py-7">품목 코드</th>
+                  <th className="px-10 py-7">품명 / 제품명</th>
+                  {activeTab === 'part' && <th className="px-10 py-7">도번</th>}
+                  <th className="px-10 py-7 text-right">현재 재고수량</th>
+                  <th className="px-10 py-7 text-center">관리</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-50">
                 {filteredInventory.length === 0 ? (
-                  <tr><td colSpan={5} className="px-8 py-20 text-center text-slate-300 font-black uppercase tracking-widest italic text-lg">기록된 데이터가 없습니다</td></tr>
+                  <tr><td colSpan={5} className="px-10 py-24 text-center text-slate-300 font-black uppercase tracking-widest italic text-2xl">기록된 데이터가 없습니다</td></tr>
                 ) : (
                   filteredInventory.map(item => {
                     const stock = calculateStock(item);
                     return (
                       <tr key={item.id} className="hover:bg-indigo-50/30 transition-colors group">
-                        <td className="px-8 py-5 font-mono text-indigo-600 font-black text-base">{item.code}</td>
-                        <td className="px-8 py-5 font-bold text-slate-800 text-base">{item.name}</td>
-                        {activeTab === 'part' && <td className="px-8 py-5 text-slate-400 font-mono text-xs uppercase">{item.drawingNumber || '-'}</td>}
-                        <td className="px-8 py-5 text-right">
-                            <span className={`text-xl font-black ${stock > 0 ? 'text-slate-900' : 'text-rose-500 animate-pulse'}`}>
-                                {stock.toLocaleString()} <span className="text-[10px] uppercase text-slate-400 ml-1">EA</span>
+                        <td className="px-10 py-7 font-mono text-indigo-600 font-black text-xl">{item.code}</td>
+                        <td className="px-10 py-7 font-black text-slate-800 text-xl">{item.name}</td>
+                        {activeTab === 'part' && <td className="px-10 py-7 text-slate-400 font-mono text-sm uppercase font-bold">{item.drawingNumber || '-'}</td>}
+                        <td className="px-10 py-7 text-right">
+                            <span className={`text-4xl font-black ${stock > 0 ? 'text-slate-900' : 'text-rose-500 animate-pulse'}`}>
+                                {stock.toLocaleString()} <span className="text-xs uppercase text-slate-400 ml-1">EA</span>
                             </span>
                         </td>
-                        <td className="px-8 py-5">
-                          <div className="flex justify-center gap-3">
-                            <button onClick={() => setSelectedItemId(item.id)} className="px-4 py-2 bg-indigo-50 text-indigo-600 rounded-xl font-black text-xs uppercase tracking-wider hover:bg-indigo-600 hover:text-white transition-all">상세</button>
-                            <button onClick={() => setItemToDelete({id: item.id, type: 'inventory'})} className="p-2 text-slate-300 hover:text-rose-600 hover:bg-rose-50 rounded-xl transition-all"><TrashIcon className="w-5 h-5" /></button>
+                        <td className="px-10 py-7">
+                          <div className="flex justify-center gap-4">
+                            <button onClick={() => setSelectedItemId(item.id)} className="px-6 py-3 bg-indigo-50 text-indigo-600 rounded-xl font-black text-sm uppercase tracking-wider hover:bg-indigo-600 hover:text-white transition-all shadow-sm">상세</button>
+                            <button onClick={() => setItemToDelete({id: item.id, type: 'inventory'})} className="p-3 text-slate-300 hover:text-rose-600 hover:bg-rose-50 rounded-2xl transition-all"><TrashIcon className="w-7 h-7" /></button>
                           </div>
                         </td>
                       </tr>
@@ -394,16 +392,16 @@ const App: React.FC = () => {
 
       {itemToDelete && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-md z-[60] flex items-center justify-center p-4">
-            <div className="bg-white rounded-3xl p-10 max-w-sm w-full shadow-2xl border border-slate-100 animate-fade-in-up">
-                <div className="flex flex-col items-center mb-6">
-                    <div className="p-4 bg-rose-50 rounded-2xl mb-4"><TrashIcon className="w-10 h-10 text-rose-500" /></div>
-                    <h4 className="text-xl font-black text-slate-800 uppercase tracking-tight">삭제 비밀번호</h4>
-                    <p className="text-xs text-slate-400 font-bold mt-1 uppercase">정말로 삭제하시겠습니까?</p>
+            <div className="bg-white rounded-[3rem] p-12 max-w-lg w-full shadow-2xl border border-slate-100 animate-fade-in-up">
+                <div className="flex flex-col items-center mb-8">
+                    <div className="p-6 bg-rose-50 rounded-[2rem] mb-6"><TrashIcon className="w-14 h-14 text-rose-500" /></div>
+                    <h4 className="text-3xl font-black text-slate-800 uppercase tracking-tight">삭제 비밀번호</h4>
+                    <p className="text-sm text-slate-400 font-bold mt-2 uppercase tracking-widest">정말로 삭제하시겠습니까?</p>
                 </div>
-                <input type="password" autoFocus value={deletePassword} onChange={(e) => setDeletePassword(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && handleDeleteItemConfirm()} placeholder="PASSWORD" className="w-full px-4 py-4 border-2 border-slate-100 rounded-2xl focus:border-rose-500 outline-none mb-6 text-center text-2xl font-black tracking-widest" />
-                <div className="grid grid-cols-2 gap-4">
-                    <button onClick={() => setItemToDelete(null)} className="py-4 bg-slate-100 text-slate-600 rounded-2xl font-black uppercase text-xs tracking-widest">취소</button>
-                    <button onClick={handleDeleteItemConfirm} className="py-4 bg-rose-600 text-white rounded-2xl font-black uppercase text-xs tracking-widest shadow-lg shadow-rose-100">삭제 확정</button>
+                <input type="password" autoFocus value={deletePassword} onChange={(e) => setDeletePassword(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && handleDeleteItemConfirm()} placeholder="PASSWORD" className="w-full px-6 py-6 border-2 border-slate-100 rounded-3xl focus:border-rose-500 outline-none mb-8 text-center text-4xl font-black tracking-widest" />
+                <div className="grid grid-cols-2 gap-6">
+                    <button onClick={() => setItemToDelete(null)} className="py-5 bg-slate-100 text-slate-600 rounded-2xl font-black uppercase text-sm tracking-widest">취소</button>
+                    <button onClick={handleDeleteItemConfirm} className="py-5 bg-rose-600 text-white rounded-2xl font-black uppercase text-sm tracking-widest shadow-lg shadow-rose-100">삭제 확정</button>
                 </div>
             </div>
         </div>
