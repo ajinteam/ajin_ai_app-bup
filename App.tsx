@@ -1,4 +1,3 @@
-
 import React, { useState, useMemo, useEffect, useRef } from 'react';
 import type { Item, Transaction } from './types';
 import AddItemModal from './components/AddItemModal';
@@ -75,12 +74,11 @@ const App: React.FC = () => {
     
     setSyncStatus('loading');
     try {
-      // Upstash REST API는 값을 문자열로 저장해야 함
       const payload = JSON.stringify({ items: data, updatedAt: new Date().toISOString() });
       const response = await fetch(`${KV_URL}/set/${DB_KEY}`, {
         method: 'POST',
         headers: { Authorization: `Bearer ${KV_TOKEN}` },
-        body: JSON.stringify(payload),
+        body: payload, // REST API set 명령어는 body에 값을 직접 넣음
       });
       if (response.ok) setSyncStatus('success');
       else throw new Error('Cloud Save Failed');
@@ -226,7 +224,7 @@ const App: React.FC = () => {
   if (!authRole) {
     return (
       <div className="min-h-screen bg-slate-900 flex items-center justify-center p-4">
-        <div className="bg-white rounded-[2rem] shadow-2xl w-full max-w-sm p-10 animate-fade-in-up border border-slate-100">
+        <div className="bg-white rounded-[2rem] shadow-2xl w-full max-w-sm p-10 border border-slate-100">
           <div className="flex flex-col items-center mb-8">
             <div className="bg-indigo-600 p-4 rounded-2xl shadow-lg mb-4">
               <BoxIcon className="w-10 h-10 text-white" />
@@ -357,7 +355,7 @@ const App: React.FC = () => {
 
       {itemToDelete && (
         <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-[60] flex items-center justify-center p-4">
-            <div className="bg-white rounded-[2rem] p-10 max-w-sm w-full shadow-2xl animate-fade-in-up border border-slate-100 text-center">
+            <div className="bg-white rounded-[2rem] p-10 max-w-sm w-full shadow-2xl border border-slate-100 text-center">
                 <h4 className="text-xl font-black text-slate-800 mb-2 uppercase tracking-tight">품목 삭제</h4>
                 <p className="text-sm text-slate-400 mb-6 font-bold uppercase tracking-widest">관리자 비밀번호를 입력하세요</p>
                 <input type="password" autoFocus value={deletePassword} onChange={(e) => setDeletePassword(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && handleDeleteItemConfirm()} placeholder="PASSWORD" className="w-full px-5 py-4 border-2 border-slate-100 rounded-xl focus:border-rose-500 outline-none mb-6 text-center text-3xl font-black tracking-widest" />
