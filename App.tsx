@@ -46,7 +46,7 @@ const App: React.FC = () => {
       }
       throw new Error('Server Fetch Failed');
     } catch (err) {
-      console.warn('서버에서 데이터를 가져오지 못했습니다. 로컬 데이터를 사용합니다.');
+      console.warn('서버 연결 실패. 로컬 데이터를 사용합니다.');
       const savedItems = localStorage.getItem(STORAGE_KEY);
       if (savedItems) setItems(JSON.parse(savedItems));
       setSyncStatus('error');
@@ -65,7 +65,6 @@ const App: React.FC = () => {
       else throw new Error('Server Save Failed');
     } catch (err) {
       setSyncStatus('error');
-      console.error('서버 동기화 실패:', err);
     }
   };
 
@@ -139,12 +138,12 @@ const App: React.FC = () => {
       try {
         const json = JSON.parse(event.target?.result as string);
         if (json.items && Array.isArray(json.items)) {
-          if (confirm('가져온 데이터로 현재 시스템을 복구하시겠습니까?\n(현재의 모든 데이터가 덮어씌워집니다.)')) {
+          if (confirm('데이터를 복구하시겠습니까? 현재 데이터가 덮어씌워집니다.')) {
             setItems(json.items);
-            alert('데이터 복구가 완료되었습니다.');
+            alert('복구가 완료되었습니다.');
           }
         } else {
-          alert('올바른 백업 파일 형식이 아닙니다.');
+          alert('올바른 파일 형식이 아닙니다.');
         }
       } catch (err) {
         alert('파일을 읽는 중 오류가 발생했습니다.');
@@ -257,21 +256,21 @@ const App: React.FC = () => {
   if (!authRole) {
     return (
       <div className="min-h-screen bg-slate-900 flex items-center justify-center p-4">
-        <div className="bg-white rounded-3xl shadow-2xl w-full max-w-md p-10 animate-fade-in-up border border-slate-100">
+        <div className="bg-white rounded-[2rem] shadow-2xl w-full max-w-md p-8 sm:p-12 animate-fade-in-up border border-slate-100">
           <div className="flex flex-col items-center mb-10">
             <div className="bg-indigo-600 p-4 rounded-2xl shadow-lg mb-6">
-              <BoxIcon className="w-12 h-12 text-white" />
+              <BoxIcon className="w-10 h-10 text-white" />
             </div>
-            <h1 className="text-3xl font-black text-slate-800 tracking-tight uppercase">재고 관리 시스템</h1>
+            <h1 className="text-2xl font-black text-slate-800 tracking-tight uppercase text-center">재고 관리 시스템</h1>
           </div>
           <form onSubmit={handleLogin} className="space-y-6">
             <input 
               type="password" autoFocus value={loginPassword}
               onChange={(e) => setLoginPassword(e.target.value)}
               placeholder="PASSWORD"
-              className="w-full px-6 py-5 bg-slate-50 border-2 border-slate-100 rounded-2xl focus:border-indigo-600 outline-none text-center text-4xl font-black tracking-[0.5em] transition-all"
+              className="w-full px-6 py-4 bg-slate-50 border-2 border-slate-100 rounded-2xl focus:border-indigo-600 outline-none text-center text-3xl font-black tracking-[0.5em] transition-all"
             />
-            <button type="submit" className="w-full py-5 bg-indigo-600 text-white font-black rounded-xl shadow-xl hover:bg-indigo-700 transition-all text-xl">로그인</button>
+            <button type="submit" className="w-full py-4 bg-indigo-600 text-white font-black rounded-xl shadow-xl hover:bg-indigo-700 transition-all text-lg uppercase tracking-widest">로그인</button>
           </form>
         </div>
       </div>
@@ -282,35 +281,37 @@ const App: React.FC = () => {
     <div className="min-h-screen bg-slate-50 text-slate-800 font-sans">
       <header className="bg-white border-b border-slate-200 sticky top-0 z-20 shadow-sm">
         <div className="container mx-auto px-4 sm:px-6">
-            <div className="flex justify-between items-center py-5">
+            <div className="flex justify-between items-center py-4">
                 <div className="flex items-center space-x-4">
-                    <BoxIcon className="h-9 w-9 text-indigo-600" />
+                    <BoxIcon className="h-8 w-8 text-indigo-600" />
                     <h1 className="text-2xl font-bold text-slate-900 tracking-tight uppercase">재고 관리 시스템</h1>
                 </div>
-                <div className="flex items-center space-x-3">
-                  <div className="flex items-center space-x-2 px-3 py-1.5 bg-slate-50 rounded-full border border-slate-100 mr-2">
-                    <div className={`w-2.5 h-2.5 rounded-full ${syncStatus === 'success' ? 'bg-emerald-500' : syncStatus === 'loading' ? 'bg-amber-500 animate-pulse' : 'bg-rose-500'}`}></div>
-                    <span className="text-[10px] font-black uppercase text-slate-400 tracking-widest">
-                        {syncStatus === 'success' ? 'Synced' : syncStatus === 'loading' ? 'Syncing' : 'Error'}
-                    </span>
+                
+                <div className="flex flex-col items-end space-y-1.5">
+                  <div className="flex items-center space-x-2">
+                    <div className={`flex items-center space-x-2 px-2.5 py-1 rounded-full border transition-all ${syncStatus === 'success' ? 'bg-emerald-50 border-emerald-100' : 'bg-slate-50 border-slate-100'}`}>
+                      <div className={`w-2 h-2 rounded-full ${syncStatus === 'success' ? 'bg-emerald-500' : syncStatus === 'loading' ? 'bg-amber-500 animate-pulse' : 'bg-slate-300'}`}></div>
+                      <span className={`text-[9px] font-black uppercase tracking-widest ${syncStatus === 'success' ? 'text-emerald-600' : 'text-slate-400'}`}>
+                          {syncStatus === 'success' ? 'Synced' : syncStatus === 'loading' ? 'Syncing' : 'Local Mode'}
+                      </span>
+                    </div>
+                    <button onClick={handleLogout} className="px-3 py-1 bg-slate-100 text-slate-500 rounded-md hover:bg-slate-200 transition-colors font-black text-[9px] uppercase">Logout</button>
                   </div>
                   
-                  {/* 데이터 관리 버튼들 (헤더로 이동 및 소형화) */}
-                  <button onClick={handleLocalExport} className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-800 text-white font-black rounded-lg hover:bg-slate-900 transition-all text-[10px] uppercase tracking-wider">
-                      <DownloadIcon className="w-3.5 h-3.5" />
-                      <span>내보내기</span>
-                  </button>
-                  <label className="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-slate-200 text-slate-600 font-black rounded-lg hover:bg-slate-50 transition-all text-[10px] cursor-pointer uppercase tracking-wider">
-                      <CloudIcon className="w-3.5 h-3.5" />
-                      <span>가져오기</span>
-                      <input type="file" ref={fileInputRef} className="hidden" accept=".json" onChange={handleLocalImport} />
-                  </label>
-                  
-                  <div className="w-px h-4 bg-slate-200 mx-1"></div>
-                  
-                  <button onClick={handleLogout} className="px-4 py-1.5 bg-slate-100 text-slate-500 rounded-lg hover:bg-slate-200 transition-colors font-black text-[10px] uppercase">Logout</button>
+                  <div className="flex items-center space-x-2">
+                    <button onClick={handleLocalExport} className="flex items-center gap-1.5 px-2.5 py-1 bg-slate-100 text-slate-500 border border-slate-200 rounded-md hover:bg-slate-200 transition-all text-[9px] font-black uppercase tracking-wider">
+                        <DownloadIcon className="w-2.5 h-2.5" />
+                        <span>내보내기</span>
+                    </button>
+                    <label className="flex items-center gap-1.5 px-2.5 py-1 bg-slate-100 text-slate-500 border border-slate-200 rounded-md hover:bg-slate-200 transition-all text-[9px] font-black cursor-pointer uppercase tracking-wider">
+                        <CloudIcon className="w-2.5 h-2.5" />
+                        <span>가져오기</span>
+                        <input type="file" ref={fileInputRef} className="hidden" accept=".json" onChange={handleLocalImport} />
+                    </label>
+                  </div>
                 </div>
             </div>
+            
             <div className="flex space-x-12 -mb-px">
                 {authRole === 'admin' && (
                   <button onClick={() => setActiveTab('part')} className={`pb-4 px-2 text-lg font-black uppercase tracking-widest transition-all border-b-4 ${activeTab === 'part' ? 'border-indigo-600 text-indigo-600' : 'border-transparent text-slate-400 hover:text-slate-600'}`}>
@@ -360,7 +361,7 @@ const App: React.FC = () => {
               </thead>
               <tbody className="divide-y divide-slate-50">
                 {filteredInventory.length === 0 ? (
-                  <tr><td colSpan={5} className="px-10 py-24 text-center text-slate-300 font-black uppercase tracking-widest italic text-2xl">기록된 데이터가 없습니다</td></tr>
+                  <tr><td colSpan={activeTab === 'part' ? 5 : 4} className="px-10 py-24 text-center text-slate-300 font-black uppercase tracking-widest italic text-2xl">기록된 데이터가 없습니다</td></tr>
                 ) : (
                   filteredInventory.map(item => {
                     const stock = calculateStock(item);
@@ -392,16 +393,16 @@ const App: React.FC = () => {
 
       {itemToDelete && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-md z-[60] flex items-center justify-center p-4">
-            <div className="bg-white rounded-[3rem] p-12 max-w-lg w-full shadow-2xl border border-slate-100 animate-fade-in-up">
+            <div className="bg-white rounded-[2.5rem] p-10 max-w-md w-full shadow-2xl border border-slate-100 animate-fade-in-up">
                 <div className="flex flex-col items-center mb-8">
-                    <div className="p-6 bg-rose-50 rounded-[2rem] mb-6"><TrashIcon className="w-14 h-14 text-rose-500" /></div>
-                    <h4 className="text-3xl font-black text-slate-800 uppercase tracking-tight">삭제 비밀번호</h4>
-                    <p className="text-sm text-slate-400 font-bold mt-2 uppercase tracking-widest">정말로 삭제하시겠습니까?</p>
+                    <div className="p-5 bg-rose-50 rounded-[1.5rem] mb-6"><TrashIcon className="w-12 h-12 text-rose-500" /></div>
+                    <h4 className="text-2xl font-black text-slate-800 uppercase tracking-tight">삭제 비밀번호</h4>
+                    <p className="text-xs text-slate-400 font-bold mt-2 uppercase tracking-widest">정말로 삭제하시겠습니까?</p>
                 </div>
-                <input type="password" autoFocus value={deletePassword} onChange={(e) => setDeletePassword(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && handleDeleteItemConfirm()} placeholder="PASSWORD" className="w-full px-6 py-6 border-2 border-slate-100 rounded-3xl focus:border-rose-500 outline-none mb-8 text-center text-4xl font-black tracking-widest" />
-                <div className="grid grid-cols-2 gap-6">
-                    <button onClick={() => setItemToDelete(null)} className="py-5 bg-slate-100 text-slate-600 rounded-2xl font-black uppercase text-sm tracking-widest">취소</button>
-                    <button onClick={handleDeleteItemConfirm} className="py-5 bg-rose-600 text-white rounded-2xl font-black uppercase text-sm tracking-widest shadow-lg shadow-rose-100">삭제 확정</button>
+                <input type="password" autoFocus value={deletePassword} onChange={(e) => setDeletePassword(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && handleDeleteItemConfirm()} placeholder="PASSWORD" className="w-full px-6 py-5 border-2 border-slate-100 rounded-2xl focus:border-rose-500 outline-none mb-8 text-center text-3xl font-black tracking-widest" />
+                <div className="grid grid-cols-2 gap-4">
+                    <button onClick={() => setItemToDelete(null)} className="py-4 bg-slate-100 text-slate-600 rounded-xl font-black uppercase text-xs tracking-widest">취소</button>
+                    <button onClick={handleDeleteItemConfirm} className="py-4 bg-rose-600 text-white rounded-xl font-black uppercase text-xs tracking-widest shadow-lg shadow-rose-100">삭제 확정</button>
                 </div>
             </div>
         </div>
