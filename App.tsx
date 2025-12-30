@@ -8,6 +8,11 @@ import { PlusIcon, BoxIcon, SearchIcon, TrashIcon, DownloadIcon, CloudIcon, Serv
 const STORAGE_KEY = 'inventory_system_data_v2';
 const ADMIN_PASSWORD = '0000';
 const PRODUCT_ONLY_PASSWORD = '1111';
+const DB_KEY = 'inventory_master_data';
+
+// Upstash 설정 (환경변수 사용)
+const KV_URL = process.env.KV_REST_API_URL;
+const KV_TOKEN = process.env.KV_REST_API_TOKEN;
 
 const generateId = (prefix: string) => `${prefix}-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
 
@@ -32,37 +37,53 @@ const App: React.FC = () => {
   const [syncStatus, setSyncStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle');
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  // Upstash 클라우드에서 데이터 가져오기
   const fetchFromServer = async () => {
+    if (!KV_URL || !KV_TOKEN) {
+      console.warn('KV 설정이 없습니다. 로컬 데이터를 사용합니다.');
+      const savedItems = localStorage.getItem(STORAGE_KEY);
+      if (savedItems) setItems(JSON.parse(savedItems));
+      return;
+    }
+
     setSyncStatus('loading');
     try {
-      const response = await fetch('/api/inventory');
-      if (response.ok) {
-        const data = await response.json();
-        if (data && Array.isArray(data.items)) {
-          setItems(data.items);
-          setSyncStatus('success');
-          return;
-        }
+      const response = await fetch(`${KV_URL}/get/${DB_KEY}`, {
+        headers: { Authorization: `Bearer ${KV_TOKEN}` },
+      });
+      const data = await response.json();
+      if (data.result) {
+        const parsed = JSON.parse(data.result);
+        setItems(parsed.items || []);
+        setSyncStatus('success');
+      } else {
+        const savedItems = localStorage.getItem(STORAGE_KEY);
+        if (savedItems) setItems(JSON.parse(savedItems));
+        setSyncStatus('idle');
       }
-      throw new Error('Server Fetch Failed');
     } catch (err) {
-      console.warn('서버 연결 실패. 로컬 데이터를 사용합니다.');
+      console.warn('DB 연결 실패. 로컬 데이터를 사용합니다.');
       const savedItems = localStorage.getItem(STORAGE_KEY);
       if (savedItems) setItems(JSON.parse(savedItems));
       setSyncStatus('error');
     }
   };
 
+  // Upstash 클라우드에 데이터 저장하기
   const saveToServer = async (data: Item[]) => {
+    if (!KV_URL || !KV_TOKEN) return;
+    
     setSyncStatus('loading');
     try {
-      const response = await fetch('/api/inventory', {
+      // Upstash REST API는 값을 문자열로 저장해야 함
+      const payload = JSON.stringify({ items: data, updatedAt: new Date().toISOString() });
+      const response = await fetch(`${KV_URL}/set/${DB_KEY}`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ items: data, updatedAt: new Date().toISOString() }),
+        headers: { Authorization: `Bearer ${KV_TOKEN}` },
+        body: JSON.stringify(payload),
       });
       if (response.ok) setSyncStatus('success');
-      else throw new Error('Server Save Failed');
+      else throw new Error('Cloud Save Failed');
     } catch (err) {
       setSyncStatus('error');
     }
@@ -75,7 +96,7 @@ const App: React.FC = () => {
   useEffect(() => {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(items));
     if (items.length > 0) {
-      const timer = setTimeout(() => saveToServer(items), 1000);
+      const timer = setTimeout(() => saveToServer(items), 2000);
       return () => clearTimeout(timer);
     }
   }, [items]);
@@ -100,27 +121,6 @@ const App: React.FC = () => {
   const handleLocalExport = async () => {
     const dataObj = { items, version: '2.0', exportDate: new Date().toISOString() };
     const jsonStr = JSON.stringify(dataObj, null, 2);
-
-    if ('showSaveFilePicker' in window) {
-      try {
-        const handle = await (window as any).showSaveFilePicker({
-          suggestedName: `재고관리_백업_${new Date().toISOString().split('T')[0]}.json`,
-          types: [{
-            description: 'JSON File',
-            accept: { 'application/json': ['.json'] },
-          }],
-        });
-        const writable = await handle.createWritable();
-        await writable.write(jsonStr);
-        await writable.close();
-        alert('파일이 지정된 위치에 저장되었습니다.');
-        return;
-      } catch (err: any) {
-        if (err.name === 'AbortError') return;
-        console.error('File API Error:', err);
-      }
-    }
-
     const blob = new Blob([jsonStr], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
@@ -142,12 +142,8 @@ const App: React.FC = () => {
             setItems(json.items);
             alert('복구가 완료되었습니다.');
           }
-        } else {
-          alert('올바른 파일 형식이 아닙니다.');
         }
-      } catch (err) {
-        alert('파일을 읽는 중 오류가 발생했습니다.');
-      }
+      } catch (err) { alert('파일 오류'); }
     };
     reader.readAsText(file);
     if (fileInputRef.current) fileInputRef.current.value = '';
@@ -161,10 +157,7 @@ const App: React.FC = () => {
     setLoginPassword('');
   };
 
-  const handleLogout = () => {
-    setAuthRole(null);
-    setSearchTerm('');
-  };
+  const handleLogout = () => { setAuthRole(null); setSearchTerm(''); };
 
   const handleAddItem = (itemData: Omit<Item, 'id' | 'transactions'>, initialQuantity: number) => {
     const newItem: Item = { ...itemData, id: generateId('item'), transactions: [] };
@@ -178,8 +171,8 @@ const App: React.FC = () => {
   };
 
   const handleDeleteItemConfirm = () => {
-    const currentPass = authRole === 'admin' ? ADMIN_PASSWORD : PRODUCT_ONLY_PASSWORD;
-    if (deletePassword !== currentPass) {
+    const correctPassword = authRole === 'admin' ? ADMIN_PASSWORD : PRODUCT_ONLY_PASSWORD;
+    if (deletePassword !== correctPassword) {
       alert('비밀번호가 틀렸습니다.');
       return;
     }
@@ -196,30 +189,15 @@ const App: React.FC = () => {
 
   const handleAddTransaction = (itemId: string, transaction: Omit<Transaction, 'id'>) => {
     const newTransaction: Transaction = { ...transaction, id: generateId('t') };
-    setItems(prev => prev.map(item => {
-      if (item.id === itemId) {
-        return { ...item, transactions: [...item.transactions, newTransaction] };
-      }
-      return item;
-    }));
+    setItems(prev => prev.map(item => item.id === itemId ? { ...item, transactions: [...item.transactions, newTransaction] } : item));
   };
 
   const handleUpdateTransaction = (itemId: string, transactionId: string, updatedData: Partial<Transaction>) => {
-    setItems(prev => prev.map(item => {
-      if (item.id === itemId) {
-        return { ...item, transactions: item.transactions.map(t => t.id === transactionId ? { ...t, ...updatedData } : t) };
-      }
-      return item;
-    }));
+    setItems(prev => prev.map(item => item.id === itemId ? { ...item, transactions: item.transactions.map(t => t.id === transactionId ? { ...t, ...updatedData } : t) } : item));
   };
 
   const handleDeleteTransaction = (itemId: string, transactionId: string) => {
-    setItems(prev => prev.map(item => {
-      if (item.id === itemId) {
-        return { ...item, transactions: item.transactions.filter(t => t.id !== transactionId) };
-      }
-      return item;
-    }));
+    setItems(prev => prev.map(item => item.id === itemId ? { ...item, transactions: item.transactions.filter(t => t.id !== transactionId) } : item));
   };
 
   const selectedItem = useMemo(() => items.find(i => i.id === selectedItemId), [items, selectedItemId]);
@@ -229,36 +207,28 @@ const App: React.FC = () => {
     return items.filter(item => {
         const matchesTab = (activeTab === 'part' && item.type === 'part') || (activeTab === 'product' && item.type === 'product');
         if (!matchesTab) return false;
-        const basicMatch = item.name.toLowerCase().includes(term) || item.code.toLowerCase().includes(term);
-        if (basicMatch) return true;
-        if (activeTab === 'product') return item.transactions.some(t => t.serialNumber?.toLowerCase().includes(term));
-        return false;
+        return item.name.toLowerCase().includes(term) || item.code.toLowerCase().includes(term);
     });
   }, [items, searchTerm, activeTab]);
 
   const exportToExcel = () => {
-    let csvContent = "\ufeff";
-    const headers = activeTab === 'part' ? ['코드', '품명', '도번', '현재재고'] : ['코드', '제품명', '현재재고'];
-    csvContent += headers.join(',') + '\r\n';
+    let csvContent = "\ufeff코드,품명,도번,적용,현재재고\r\n";
     filteredInventory.forEach(item => {
-      const row = activeTab === 'part' 
-        ? [item.code, item.name, item.drawingNumber, calculateStock(item)]
-        : [item.code, item.name, calculateStock(item)];
-      csvContent += row.map(v => `"${String(v).replace(/"/g, '""')}"`).join(',') + '\r\n';
+      csvContent += `"${item.code}","${item.name}","${item.drawingNumber || ''}","${item.application || ''}",${calculateStock(item)}\r\n`;
     });
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
     const link = document.createElement('a');
     link.href = URL.createObjectURL(blob);
-    link.download = `${activeTab === 'part' ? '부품' : '제품'}_재고_${new Date().toISOString().split('T')[0]}.csv`;
+    link.download = `재고현황_${new Date().toISOString().split('T')[0]}.csv`;
     link.click();
   };
 
   if (!authRole) {
     return (
       <div className="min-h-screen bg-slate-900 flex items-center justify-center p-4">
-        <div className="bg-white rounded-[2rem] shadow-2xl w-full max-w-md p-8 sm:p-12 animate-fade-in-up border border-slate-100">
-          <div className="flex flex-col items-center mb-10">
-            <div className="bg-indigo-600 p-4 rounded-2xl shadow-lg mb-6">
+        <div className="bg-white rounded-[2rem] shadow-2xl w-full max-w-sm p-10 animate-fade-in-up border border-slate-100">
+          <div className="flex flex-col items-center mb-8">
+            <div className="bg-indigo-600 p-4 rounded-2xl shadow-lg mb-4">
               <BoxIcon className="w-10 h-10 text-white" />
             </div>
             <h1 className="text-2xl font-black text-slate-800 tracking-tight uppercase text-center">재고 관리 시스템</h1>
@@ -268,9 +238,9 @@ const App: React.FC = () => {
               type="password" autoFocus value={loginPassword}
               onChange={(e) => setLoginPassword(e.target.value)}
               placeholder="PASSWORD"
-              className="w-full px-6 py-4 bg-slate-50 border-2 border-slate-100 rounded-2xl focus:border-indigo-600 outline-none text-center text-3xl font-black tracking-[0.5em] transition-all"
+              className="w-full px-5 py-4 bg-slate-50 border-2 border-slate-100 rounded-2xl focus:border-indigo-600 outline-none text-center text-3xl font-black tracking-[0.4em] transition-all"
             />
-            <button type="submit" className="w-full py-4 bg-indigo-600 text-white font-black rounded-xl shadow-xl hover:bg-indigo-700 transition-all text-lg uppercase tracking-widest">로그인</button>
+            <button type="submit" className="w-full py-4 bg-indigo-600 text-white font-black rounded-xl shadow-lg hover:bg-indigo-700 transition-all text-sm uppercase tracking-widest">로그인</button>
           </form>
         </div>
       </div>
@@ -280,111 +250,105 @@ const App: React.FC = () => {
   return (
     <div className="min-h-screen bg-slate-50 text-slate-800 font-sans">
       <header className="bg-white border-b border-slate-200 sticky top-0 z-20 shadow-sm">
-        <div className="container mx-auto px-4 sm:px-6">
-            <div className="flex justify-between items-center py-4">
+        <div className="container mx-auto px-6">
+            <div className="flex justify-between items-center py-5">
                 <div className="flex items-center space-x-4">
                     <BoxIcon className="h-8 w-8 text-indigo-600" />
-                    <h1 className="text-2xl font-bold text-slate-900 tracking-tight uppercase">재고 관리 시스템</h1>
+                    <h1 className="text-2xl font-bold text-slate-900 tracking-tight uppercase">Inventory System</h1>
                 </div>
                 
-                <div className="flex flex-col items-end space-y-1.5">
-                  <div className="flex items-center space-x-2">
-                    <div className={`flex items-center space-x-2 px-2.5 py-1 rounded-full border transition-all ${syncStatus === 'success' ? 'bg-emerald-50 border-emerald-100' : 'bg-slate-50 border-slate-100'}`}>
+                <div className="flex items-center space-x-4">
+                    <div className={`flex items-center space-x-2 px-3 py-1.5 rounded-full border transition-all ${syncStatus === 'success' ? 'bg-emerald-50 border-emerald-100' : 'bg-slate-50 border-slate-100'}`}>
                       <div className={`w-2 h-2 rounded-full ${syncStatus === 'success' ? 'bg-emerald-500' : syncStatus === 'loading' ? 'bg-amber-500 animate-pulse' : 'bg-slate-300'}`}></div>
-                      <span className={`text-[9px] font-black uppercase tracking-widest ${syncStatus === 'success' ? 'text-emerald-600' : 'text-slate-400'}`}>
-                          {syncStatus === 'success' ? 'Synced' : syncStatus === 'loading' ? 'Syncing' : 'Local Mode'}
+                      <span className={`text-[10px] font-black uppercase tracking-widest ${syncStatus === 'success' ? 'text-emerald-600' : 'text-slate-400'}`}>
+                          {syncStatus === 'success' ? 'Synced Cloud' : syncStatus === 'loading' ? 'Syncing...' : 'Local Mode'}
                       </span>
                     </div>
-                    <button onClick={handleLogout} className="px-3 py-1 bg-slate-100 text-slate-500 rounded-md hover:bg-slate-200 transition-colors font-black text-[9px] uppercase">Logout</button>
-                  </div>
-                  
-                  <div className="flex items-center space-x-2">
-                    <button onClick={handleLocalExport} className="flex items-center gap-1.5 px-2.5 py-1 bg-slate-100 text-slate-500 border border-slate-200 rounded-md hover:bg-slate-200 transition-all text-[9px] font-black uppercase tracking-wider">
-                        <DownloadIcon className="w-2.5 h-2.5" />
-                        <span>내보내기</span>
+                    <button onClick={handleLocalExport} className="p-2 text-slate-400 hover:text-slate-600 transition-all" title="로컬 백업 내보내기">
+                        <DownloadIcon />
                     </button>
-                    <label className="flex items-center gap-1.5 px-2.5 py-1 bg-slate-100 text-slate-500 border border-slate-200 rounded-md hover:bg-slate-200 transition-all text-[9px] font-black cursor-pointer uppercase tracking-wider">
-                        <CloudIcon className="w-2.5 h-2.5" />
-                        <span>가져오기</span>
+                    <label className="p-2 text-slate-400 hover:text-slate-600 transition-all cursor-pointer" title="로컬 백업 가져오기">
+                        <CloudIcon />
                         <input type="file" ref={fileInputRef} className="hidden" accept=".json" onChange={handleLocalImport} />
                     </label>
-                  </div>
+                    <button onClick={handleLogout} className="px-4 py-1.5 bg-slate-100 text-slate-500 rounded-lg border border-slate-200 hover:bg-slate-200 transition-colors font-black text-[10px] uppercase">Logout</button>
                 </div>
             </div>
             
-            <div className="flex space-x-12 -mb-px">
+            <div className="flex space-x-8 -mb-px">
                 {authRole === 'admin' && (
-                  <button onClick={() => setActiveTab('part')} className={`pb-4 px-2 text-lg font-black uppercase tracking-widest transition-all border-b-4 ${activeTab === 'part' ? 'border-indigo-600 text-indigo-600' : 'border-transparent text-slate-400 hover:text-slate-600'}`}>
-                    부품 재고관리 ({stats.partCount})
+                  <button onClick={() => setActiveTab('part')} className={`pb-4 px-2 text-sm font-black uppercase tracking-widest transition-all border-b-2 ${activeTab === 'part' ? 'border-indigo-600 text-indigo-600' : 'border-transparent text-slate-400 hover:text-slate-600'}`}>
+                    부품 관리 ({stats.partCount})
                   </button>
                 )}
-                <button onClick={() => setActiveTab('product')} className={`pb-4 px-2 text-lg font-black uppercase tracking-widest transition-all border-b-4 ${activeTab === 'product' ? 'border-indigo-600 text-indigo-600' : 'border-transparent text-slate-400 hover:text-slate-600'}`}>
-                  제품 재고관리 ({stats.productCount})
+                <button onClick={() => setActiveTab('product')} className={`pb-4 px-2 text-sm font-black uppercase tracking-widest transition-all border-b-2 ${activeTab === 'product' ? 'border-indigo-600 text-indigo-600' : 'border-transparent text-slate-400 hover:text-slate-600'}`}>
+                  제품 관리 ({stats.productCount})
                 </button>
             </div>
         </div>
       </header>
 
-      <main className="container mx-auto p-4 sm:p-8">
-        <div className="flex flex-col xl:flex-row xl:justify-between xl:items-center gap-6 mb-10">
-          <div className="relative flex-grow max-w-3xl">
-              <span className="absolute inset-y-0 left-0 flex items-center pl-5"><SearchIcon className="text-slate-400 w-6 h-6" /></span>
+      <main className="container mx-auto p-6">
+        <div className="flex flex-col md:flex-row md:justify-between md:items-center gap-4 mb-8">
+          <div className="relative flex-grow max-w-2xl">
+              <span className="absolute inset-y-0 left-0 flex items-center pl-4"><SearchIcon className="text-slate-400 w-6 h-6" /></span>
               <input
                   type="text" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value.toUpperCase())}
-                  placeholder="품명, 코드, 일련번호 검색..."
-                  className="w-full pl-14 pr-6 py-4 border-2 border-slate-100 rounded-2xl focus:outline-none focus:border-indigo-400 bg-white shadow-sm font-bold text-lg transition-all"
+                  placeholder="품명 또는 코드로 검색..."
+                  className="w-full pl-14 pr-6 py-4 border-2 border-slate-100 rounded-[1.25rem] focus:outline-none focus:border-indigo-400 bg-white shadow-sm font-bold text-lg transition-all"
               />
           </div>
-          <div className="flex flex-wrap gap-3">
-            <button onClick={exportToExcel} className="flex items-center gap-2 px-8 py-4 bg-emerald-600 text-white font-black rounded-xl shadow-lg hover:bg-emerald-700 transition-all text-base uppercase tracking-widest">
+          <div className="flex gap-3">
+            <button onClick={exportToExcel} className="flex items-center gap-2 px-6 py-4 bg-emerald-600 text-white font-black rounded-xl shadow-lg hover:bg-emerald-700 transition-all text-xs uppercase tracking-widest">
                 <ServerIcon className="w-5 h-5" />
                 <span>엑셀 파일 저장</span>
             </button>
-            <button onClick={() => setShowAddItemModal(true)} className="flex items-center gap-2 px-10 py-4 bg-indigo-600 text-white font-black rounded-xl shadow-xl shadow-indigo-100 hover:bg-indigo-700 transition-all text-base uppercase tracking-widest">
-                <PlusIcon className="w-6 h-6" />
+            <button onClick={() => setShowAddItemModal(true)} className="flex items-center gap-2 px-8 py-4 bg-indigo-600 text-white font-black rounded-xl shadow-lg hover:bg-indigo-700 transition-all text-xs uppercase tracking-widest">
+                <PlusIcon className="w-5 h-5" />
                 <span>신규 등록</span>
             </button>
           </div>
         </div>
 
-        <div className="bg-white shadow-2xl border border-slate-100 rounded-[2.5rem] overflow-hidden">
+        <div className="bg-white shadow-xl border border-slate-100 rounded-[2rem] overflow-hidden">
           <div className="overflow-x-auto">
             <table className="w-full text-left">
-              <thead className="text-sm text-slate-400 uppercase bg-slate-50/50 border-b border-slate-100 font-black tracking-[0.2em]">
+              <thead className="text-[11px] text-slate-400 uppercase bg-slate-50/50 border-b border-slate-100 font-black tracking-[0.2em]">
                 <tr>
-                  <th className="px-10 py-7">품목 코드</th>
-                  <th className="px-10 py-7">품명 / 제품명</th>
-                  {activeTab === 'part' && <th className="px-10 py-7">도번</th>}
-                  <th className="px-10 py-7 text-right">현재 재고수량</th>
-                  <th className="px-10 py-7 text-center">관리</th>
+                  <th className="px-8 py-5">코드</th>
+                  <th className="px-8 py-5">품명 / 제품명</th>
+                  {activeTab === 'part' && <th className="px-8 py-5">도번 / 규격</th>}
+                  <th className="px-8 py-5 text-right">현재 재고</th>
+                  <th className="px-8 py-5 text-center">관리</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-50">
-                {filteredInventory.length === 0 ? (
-                  <tr><td colSpan={activeTab === 'part' ? 5 : 4} className="px-10 py-24 text-center text-slate-300 font-black uppercase tracking-widest italic text-2xl">기록된 데이터가 없습니다</td></tr>
-                ) : (
-                  filteredInventory.map(item => {
-                    const stock = calculateStock(item);
-                    return (
-                      <tr key={item.id} className="hover:bg-indigo-50/30 transition-colors group">
-                        <td className="px-10 py-7 font-mono text-indigo-600 font-black text-xl">{item.code}</td>
-                        <td className="px-10 py-7 font-black text-slate-800 text-xl">{item.name}</td>
-                        {activeTab === 'part' && <td className="px-10 py-7 text-slate-400 font-mono text-sm uppercase font-bold">{item.drawingNumber || '-'}</td>}
-                        <td className="px-10 py-7 text-right">
-                            <span className={`text-4xl font-black ${stock > 0 ? 'text-slate-900' : 'text-rose-500 animate-pulse'}`}>
-                                {stock.toLocaleString()} <span className="text-xs uppercase text-slate-400 ml-1">EA</span>
-                            </span>
+                {filteredInventory.map(item => {
+                  const stock = calculateStock(item);
+                  return (
+                    <tr key={item.id} className="hover:bg-indigo-50/20 transition-colors group">
+                      <td className="px-8 py-5 font-mono text-indigo-600 font-black text-lg">{item.code}</td>
+                      <td className="px-8 py-5 font-black text-slate-800 text-lg">{item.name}</td>
+                      {activeTab === 'part' && (
+                        <td className="px-8 py-5">
+                          <p className="text-slate-500 font-bold text-sm uppercase">{item.drawingNumber || '-'}</p>
+                          <p className="text-slate-400 text-xs">{item.spec || '-'}</p>
                         </td>
-                        <td className="px-10 py-7">
-                          <div className="flex justify-center gap-4">
-                            <button onClick={() => setSelectedItemId(item.id)} className="px-6 py-3 bg-indigo-50 text-indigo-600 rounded-xl font-black text-sm uppercase tracking-wider hover:bg-indigo-600 hover:text-white transition-all shadow-sm">상세</button>
-                            <button onClick={() => setItemToDelete({id: item.id, type: 'inventory'})} className="p-3 text-slate-300 hover:text-rose-600 hover:bg-rose-50 rounded-2xl transition-all"><TrashIcon className="w-7 h-7" /></button>
-                          </div>
-                        </td>
-                      </tr>
-                    );
-                  })
-                )}
+                      )}
+                      <td className="px-8 py-5 text-right">
+                          <span className={`text-3xl font-black ${stock > 0 ? 'text-slate-900' : 'text-rose-500'}`}>
+                              {stock.toLocaleString()}
+                          </span>
+                      </td>
+                      <td className="px-8 py-5">
+                        <div className="flex justify-center gap-3">
+                          <button onClick={() => setSelectedItemId(item.id)} className="px-4 py-2 bg-indigo-50 text-indigo-600 rounded-xl font-black text-[11px] uppercase hover:bg-indigo-600 hover:text-white transition-all shadow-sm">상세내역</button>
+                          <button onClick={() => setItemToDelete({id: item.id, type: 'inventory'})} className="p-2 text-slate-300 hover:text-rose-600 transition-all"><TrashIcon className="w-6 h-6" /></button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
@@ -392,17 +356,14 @@ const App: React.FC = () => {
       </main>
 
       {itemToDelete && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-md z-[60] flex items-center justify-center p-4">
-            <div className="bg-white rounded-[2.5rem] p-10 max-w-md w-full shadow-2xl border border-slate-100 animate-fade-in-up">
-                <div className="flex flex-col items-center mb-8">
-                    <div className="p-5 bg-rose-50 rounded-[1.5rem] mb-6"><TrashIcon className="w-12 h-12 text-rose-500" /></div>
-                    <h4 className="text-2xl font-black text-slate-800 uppercase tracking-tight">삭제 비밀번호</h4>
-                    <p className="text-xs text-slate-400 font-bold mt-2 uppercase tracking-widest">정말로 삭제하시겠습니까?</p>
-                </div>
-                <input type="password" autoFocus value={deletePassword} onChange={(e) => setDeletePassword(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && handleDeleteItemConfirm()} placeholder="PASSWORD" className="w-full px-6 py-5 border-2 border-slate-100 rounded-2xl focus:border-rose-500 outline-none mb-8 text-center text-3xl font-black tracking-widest" />
+        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-[60] flex items-center justify-center p-4">
+            <div className="bg-white rounded-[2rem] p-10 max-w-sm w-full shadow-2xl animate-fade-in-up border border-slate-100 text-center">
+                <h4 className="text-xl font-black text-slate-800 mb-2 uppercase tracking-tight">품목 삭제</h4>
+                <p className="text-sm text-slate-400 mb-6 font-bold uppercase tracking-widest">관리자 비밀번호를 입력하세요</p>
+                <input type="password" autoFocus value={deletePassword} onChange={(e) => setDeletePassword(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && handleDeleteItemConfirm()} placeholder="PASSWORD" className="w-full px-5 py-4 border-2 border-slate-100 rounded-xl focus:border-rose-500 outline-none mb-6 text-center text-3xl font-black tracking-widest" />
                 <div className="grid grid-cols-2 gap-4">
-                    <button onClick={() => setItemToDelete(null)} className="py-4 bg-slate-100 text-slate-600 rounded-xl font-black uppercase text-xs tracking-widest">취소</button>
-                    <button onClick={handleDeleteItemConfirm} className="py-4 bg-rose-600 text-white rounded-xl font-black uppercase text-xs tracking-widest shadow-lg shadow-rose-100">삭제 확정</button>
+                    <button onClick={() => setItemToDelete(null)} className="py-3.5 bg-slate-100 text-slate-600 rounded-xl font-black uppercase text-xs tracking-widest">취소</button>
+                    <button onClick={handleDeleteItemConfirm} className="py-3.5 bg-rose-600 text-white rounded-xl font-black uppercase text-xs tracking-widest shadow-lg shadow-rose-100">삭제 확인</button>
                 </div>
             </div>
         </div>
